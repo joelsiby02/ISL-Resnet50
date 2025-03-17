@@ -14,6 +14,7 @@ attrs==25.3.0
 azure-core==1.32.0
 azure-storage-blob==12.25.0
 babel==2.17.0
+backcall==0.2.0
 beautifulsoup4==4.13.3
 black==25.1.0
 bleach==5.0.1
@@ -54,6 +55,7 @@ django-storages==1.12.3
 django-user-agents==0.4.0
 djangorestframework==3.15.2
 dnspython==2.7.0
+docopt==0.6.2
 drf-dynamic-fields==0.3.0
 drf-flex-fields==0.9.5
 drf-generators==0.3.0
@@ -97,7 +99,7 @@ importlib_metadata==8.6.1
 inflect==5.6.2
 inflection==0.5.1
 ipykernel==6.29.5
-ipython==9.0.2
+ipython==8.12.3
 ipython_pygments_lexers==1.1.1
 ipywidgets==8.1.5
 isodate==0.7.2
@@ -115,11 +117,11 @@ jsonpointer==3.0.0
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
 jupyter==1.1.1
+jupyter_client==8.6.3
 jupyter-console==6.6.3
+jupyter_core==5.7.2
 jupyter-events==0.12.0
 jupyter-lsp==2.2.5
-jupyter_client==8.6.3
-jupyter_core==5.7.2
 jupyter_server==2.15.0
 jupyter_server_terminals==0.5.3
 jupyterlab==4.3.6
@@ -163,7 +165,10 @@ pandas==2.2.3
 pandocfilters==1.5.1
 parso==0.8.4
 pathspec==0.12.1
+pickleshare==0.7.5
 pillow==11.1.0
+pip==25.0.1
+pipreqs==0.5.0
 platformdirs==4.3.6
 plotly==6.0.1
 prometheus_client==0.21.1
@@ -272,4 +277,5 @@ wheel==0.40.0
 widgetsnbextension==4.0.13
 wrapt==1.17.2
 xmljson==0.2.1
+yarg==0.1.9
 zipp==3.21.0
