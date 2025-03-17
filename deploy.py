@@ -1,4 +1,7 @@
 # deploy.py
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+
 import streamlit as st
 import requests
 import os

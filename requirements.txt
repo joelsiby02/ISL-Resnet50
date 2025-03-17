@@ -10,13 +10,13 @@ flask==3.1.0
 gunicorn==23.0.0
 Jinja2==3.1.6
 numpy==1.26.4
-opencv-python==4.9.0.80
+opencv-python-headless==4.9.0.80
 pillow==11.1.0
 protobuf==5.29.3
 pyyaml==6.0.2
 requests==2.32.3
 streamlit==1.43.2
-torch==2.6.0
-torchvision==0.21.0
-ultralytics==8.3.90
+torch==2.2.0+cpu
+torchvision==0.17.0+cpu
+ultralytics==8.1.40
 Werkzeug==3.1.3
