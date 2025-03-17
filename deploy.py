@@ -22,8 +22,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 
 # Load YOLO model
-model = YOLO("my_model.pt")
-model.export(format="torchscript", device='cpu')  # Creates my_model.torchscript
+MODEL_PATH = "my_model.pt"
+model = YOLO(MODEL_PATH).to('cpu')  # Force CPU device
 
 def convert_video_to_mp4(input_path, output_path):
     cap = cv2.VideoCapture(input_path)
