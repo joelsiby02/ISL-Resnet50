@@ -1,96 +1,14 @@
-# deploy.py
 import os
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-
-import streamlit as st
-import requests
-import os
-import atexit
+import tempfile
 import shutil
-from flask import Flask, request, jsonify, send_from_directory
-from ultralytics import YOLO
-import threading
 import cv2
 import glob
+import subprocess
+import streamlit as st
+from ultralytics import YOLO
 from streamlit_extras.let_it_rain import rain
 
-# ---------------------- Flask Backend Setup ----------------------
-app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-RESULT_FOLDER = "runs/detect/predict"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(RESULT_FOLDER, exist_ok=True)
-
-# Load YOLO model
-MODEL_PATH = "my_model.pt"
-model = YOLO(MODEL_PATH).to('cpu')  # Force CPU device
-
-def convert_video_to_mp4(input_path, output_path):
-    cap = cv2.VideoCapture(input_path)
-    fourcc = cv2.VideoWriter_fourcc(*'avc1')
-    out = cv2.VideoWriter(output_path, fourcc, 
-                         cap.get(cv2.CAP_PROP_FPS), 
-                         (int(cap.get(3)), int(cap.get(4))))
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret: break
-        out.write(frame)
-    cap.release()
-    out.release()
-    os.remove(input_path)
-
-@app.route("/predict", methods=["POST"])
-def predict():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-    file = request.files["file"]
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(file_path)
-    model.predict(source=file_path, save=True, project="runs/detect", name="predict", exist_ok=True)
-    result_path = os.path.join(RESULT_FOLDER, file.filename)
-    return jsonify({"result_image": f"/results/{file.filename}"})
-
-@app.route("/predict_video", methods=["POST"])
-def predict_video():
-    file = request.files["file"]
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(file_path)
-    detected_classes = set()
-    results = model.predict(source=file_path, save=True, project="runs/detect", name="predict", exist_ok=True)
-    for result in results:
-        for box in result.boxes:
-            detected_classes.add(model.names[int(box.cls.item())])
-    base_name = os.path.splitext(file.filename)[0]
-    avi_path = max(glob.glob(os.path.join(RESULT_FOLDER, f"{base_name}*.avi")), key=os.path.getctime)
-    mp4_path = avi_path.replace(".avi", ".mp4")
-    convert_video_to_mp4(avi_path, mp4_path)
-    return jsonify({"result_video": f"/results/{os.path.basename(mp4_path)}", "detected_classes": list(detected_classes)})
-
-@app.route("/results/<filename>")
-def get_result_file(filename):
-    return send_from_directory(RESULT_FOLDER, filename)
-
-def run_flask():
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
-
-# Start Flask in background thread
-flask_thread = threading.Thread(target=run_flask)
-flask_thread.daemon = True
-flask_thread.start()
-
-# ---------------------- Streamlit Frontend ----------------------
-# Configuration
-API_URL = "http://localhost:5000/predict"
-ALLOWED_IMAGE_TYPES = ["jpg", "jpeg", "png"]
-ALLOWED_VIDEO_TYPES = ["mp4", "avi", "mov"]
-
-# Cleanup function
-def cleanup():
-    if os.path.exists("temp"):
-        shutil.rmtree("temp", ignore_errors=True)
-atexit.register(cleanup)
-
-# UI Configuration
+# ---------------------- Configuration ----------------------
 st.set_page_config(
     page_title="ISL Detector",
     page_icon="🖼️",
@@ -98,65 +16,169 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS and sidebar setup
-st.markdown("""
-    <style>
-    .main { background: #f8f9fa; }
-    .stButton>button { background: #4a90e2; color: white; border-radius: 8px; }
-    .result-box { border: 2px solid #e0e0e0; border-radius: 10px; padding: 1rem; }
-    </style>""", unsafe_allow_html=True)
+# Initialize model
+MODEL_PATH = "my_model.pt"
+model = YOLO(MODEL_PATH).to('cpu')  # Force CPU usage
 
-with st.sidebar:
-    st.title("🖼️ ISL Detection System")
-    app_mode = st.radio("Select Mode", ["📷 Image Detection", "🎥 Video Analysis", "📸 Live Capture"])
-    st.markdown("---")
-    with st.expander("ℹ️ Instructions"):
-        st.markdown("""1. Select mode\n2. Upload media\n3. Detect objects""")
+# Temporary directories
+UPLOAD_FOLDER = tempfile.gettempdir()
+RESULT_FOLDER = tempfile.gettempdir()
+ALLOWED_IMAGE_TYPES = ["jpg", "jpeg", "png"]
+ALLOWED_VIDEO_TYPES = ["mp4", "avi", "mov"]
 
-# Main application logic
+# ---------------------- Helper Functions ----------------------
 def success_animation():
     rain(emoji="🎉", font_size=20, falling_speed=3, animation_length=1)
 
-def handle_image():
-    uploaded_file = st.file_uploader("Upload image", type=ALLOWED_IMAGE_TYPES)
-    if uploaded_file and st.button("🔍 Detect Objects"):
-        with st.spinner("Analyzing..."):
-            response = requests.post(API_URL, files={"file": uploaded_file})
-            if response.status_code == 200:
-                result = response.json()
-                col1, col2 = st.columns(2)
-                with col1: st.image(uploaded_file, use_container_width=True)
-                with col2: 
-                    st.image(f"http://localhost:5000/results/{uploaded_file.name}", 
-                            use_container_width=True)
-                    success_animation()
+def cleanup():
+    for folder in [UPLOAD_FOLDER, RESULT_FOLDER]:
+        if os.path.exists(folder):
+            shutil.rmtree(folder, ignore_errors=True)
+    if os.path.exists("runs"):
+        shutil.rmtree("runs", ignore_errors=True)
 
-def handle_video():
-    uploaded_video = st.file_uploader("Upload video", type=ALLOWED_VIDEO_TYPES)
-    if uploaded_video and st.button("🔍 Analyze Video"):
-        with st.spinner("Processing..."):
-            response = requests.post("http://localhost:5000/predict_video", files={"file": uploaded_video})
-            if response.status_code == 200:
-                result = response.json()
-                st.video(f"http://localhost:5000/results/{result['result_video'].split('/')[-1]}")
+atexit.register(cleanup)
 
-def handle_camera():
-    frame = st.camera_input("Take a picture")
-    if frame and st.button("🔍 Detect"):
-        with st.spinner("Processing..."):
-            response = requests.post("http://localhost:5000/predict_frame", files={"file": frame})
-            if response.status_code == 200:
-                result = response.json()
-                col1, col2 = st.columns(2)
-                with col1: st.image(frame, use_container_width=True)
-                with col2: st.image(f"http://localhost:5000/results/{result['result_image'].split('/')[-1]}")
+def convert_video_to_mp4(input_path, output_path):
+    """Convert video using FFmpeg"""
+    try:
+        subprocess.run([
+            'ffmpeg', '-i', input_path,
+            '-vcodec', 'libx264',
+            output_path, '-y'
+        ], check=True)
+        os.remove(input_path)
+        return True
+    except Exception as e:
+        st.error(f"Video conversion failed: {str(e)}")
+        return False
 
-# Routing
-st.title("ISL - Resnet 50 / YOLO V11")
-if "Image" in app_mode: handle_image()
-elif "Video" in app_mode: handle_video()
-else: handle_camera()
+# ---------------------- Prediction Handlers ----------------------
+def predict_image(uploaded_file):
+    """Handle image prediction"""
+    try:
+        # Save uploaded file
+        file_path = os.path.join(UPLOAD_FOLDER, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Run prediction
+        results = model.predict(
+            source=file_path,
+            save=True,
+            project=RESULT_FOLDER,
+            name="predict",
+            exist_ok=True
+        )
+        
+        # Get result path
+        result_dir = os.path.join(RESULT_FOLDER, "predict")
+        return glob.glob(os.path.join(result_dir, uploaded_file.name))[0]
+        
+    except Exception as e:
+        st.error(f"Image prediction failed: {str(e)}")
+        return None
 
-# Footer
-st.markdown("---")
-st.markdown("🚀 Powered by Diya Group | 🔐 Secure Processing", unsafe_allow_html=True)
+def predict_video(uploaded_file):
+    """Handle video prediction"""
+    try:
+        # Save uploaded file
+        file_path = os.path.join(UPLOAD_FOLDER, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Run prediction
+        results = model.predict(
+            source=file_path,
+            save=True,
+            project=RESULT_FOLDER,
+            name="predict",
+            exist_ok=True
+        )
+        
+        # Process results
+        detected_classes = set()
+        for result in results:
+            for box in result.boxes:
+                detected_classes.add(model.names[int(box.cls.item())])
+        
+        # Convert video format
+        result_dir = os.path.join(RESULT_FOLDER, "predict")
+        base_name = os.path.splitext(uploaded_file.name)[0]
+        avi_path = max(glob.glob(os.path.join(result_dir, f"{base_name}*.avi")), key=os.path.getctime)
+        mp4_path = avi_path.replace(".avi", ".mp4")
+        
+        if convert_video_to_mp4(avi_path, mp4_path):
+            return mp4_path, detected_classes
+        return None, None
+        
+    except Exception as e:
+        st.error(f"Video prediction failed: {str(e)}")
+        return None, None
+
+# ---------------------- UI Components ----------------------
+def sidebar():
+    with st.sidebar:
+        st.title("🖼️ ISL Detection System")
+        app_mode = st.radio("Select Mode", ["📷 Image Detection", "🎥 Video Analysis", "📸 Live Capture"])
+        st.markdown("---")
+        with st.expander("ℹ️ Instructions"):
+            st.markdown("""1. Select mode\n2. Upload media\n3. Detect objects""")
+        return app_mode
+
+# ---------------------- Main Application ----------------------
+def main():
+    # Custom CSS
+    st.markdown("""
+        <style>
+        .main { background: #f8f9fa; }
+        .stButton>button { background: #4a90e2; color: white; border-radius: 8px; }
+        .result-box { border: 2px solid #e0e0e0; border-radius: 10px; padding: 1rem; }
+        </style>
+        """, unsafe_allow_html=True)
+    
+    app_mode = sidebar()
+    st.title("ISL - YOLO Object Detection")
+    
+    if "Image" in app_mode:
+        uploaded_file = st.file_uploader("Upload image", type=ALLOWED_IMAGE_TYPES)
+        if uploaded_file and st.button("🔍 Detect Objects"):
+            with st.spinner("Analyzing..."):
+                result_path = predict_image(uploaded_file)
+                if result_path:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.image(uploaded_file, use_container_width=True, caption="Original Image")
+                    with col2:
+                        st.image(result_path, use_container_width=True, caption="Detection Result")
+                        success_animation()
+    
+    elif "Video" in app_mode:
+        uploaded_file = st.file_uploader("Upload video", type=ALLOWED_VIDEO_TYPES)
+        if uploaded_file and st.button("🔍 Analyze Video"):
+            with st.spinner("Processing..."):
+                result_path, classes = predict_video(uploaded_file)
+                if result_path:
+                    st.video(result_path)
+                    if classes:
+                        st.subheader("Detected Classes")
+                        st.write(", ".join(classes))
+    
+    else:  # Live Camera
+        frame = st.camera_input("Take a picture")
+        if frame and st.button("🔍 Detect"):
+            with st.spinner("Processing..."):
+                result_path = predict_image(frame)
+                if result_path:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.image(frame, use_container_width=True, caption="Original Capture")
+                    with col2:
+                        st.image(result_path, use_container_width=True, caption="Detection Result")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("🚀 Powered by Diya Group | 🔐 Secure Processing", unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()

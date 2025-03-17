@@ -1,10 +1,11 @@
 opencv-python-headless==4.9.0.80
-torch==2.2.0
-torchvision==0.17.0
-ultralytics==8.3.90
 numpy==1.26.4
-streamlit==1.43.2
 streamlit-extras==0.6.0
 flask==3.1.0
-protobuf==5.29.3
 pillow==11.1.0
+opencv-python-headless==4.9.0.80
+torch==2.2.0+cpu
+torchvision==0.17.0+cpu
+ultralytics==8.3.90
+streamlit==1.43.2
+protobuf==5.29.3
